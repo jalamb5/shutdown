@@ -153,6 +153,39 @@ footer{padding:0 26px 26px}
 }
 .recall p{margin:0; opacity:.85}
 
+.phraseRow{display:flex; gap:20px; align-items:flex-start; margin:0 0 26px}
+.lantern{
+  width:38px; height:auto; flex:none; margin-top:4px;
+  opacity:.55; overflow:visible;
+}
+.lantern .flame{
+  transform-origin:20px 40px;
+  animation:flicker 5.5s ease-in-out infinite;
+  filter:drop-shadow(0 0 7px var(--lamp));
+}
+@keyframes flicker{
+  0%,100%{opacity:.9; transform:scaleY(1)}
+  38%{opacity:.72; transform:scaleY(.94)}
+  61%{opacity:1; transform:scaleY(1.04)}
+}
+.phrase{
+  font-family:"Fraunces",Georgia,serif;
+  font-variation-settings:"SOFT" 60,"WONK" 1;
+  font-weight:300; font-size:clamp(30px,6.4vw,46px); line-height:1.12;
+  letter-spacing:-.02em; margin:0; padding:0;
+}
+@media (max-width:420px){ .lantern{width:30px} .phraseRow{gap:14px} }
+
+.handoff{margin-top:34px; padding-top:4px}
+.handoff .actions{margin-top:0}
+#settings{margin-top:18px; display:grid; gap:14px}
+#settings label{
+  display:block;
+  font-family:"IBM Plex Mono",monospace; font-size:10px;
+  letter-spacing:.16em; text-transform:uppercase; opacity:.6;
+}
+#settings input{margin-top:6px; font-size:15px; letter-spacing:0; text-transform:none; opacity:1}
+
 @media (prefers-reduced-motion:reduce){
   *{animation:none !important; transition:background .01s, color .01s !important}
 }
@@ -240,10 +273,31 @@ footer{padding:0 26px 26px}
     <!-- 5 -->
     <section class="panel" data-step="5">
       <p class="eyebrow"><span>Step 5 of 5 — Say it</span><span class="rule"></span></p>
-      <h2>Out loud, same words, every night.</h2>
-      <p class="say">The phrase doesn't matter. Saying the <em>same one daily</em> is what turns it into a switch. When work turns up in your head at nine o'clock, you don't argue with it — you point at this.</p>
+      <p class="say">Out loud. Same words every night, only ever after the other four steps.</p>
+      <div class="phraseRow">
+        <svg class="lantern" viewBox="0 0 40 76" aria-hidden="true" focusable="false">
+          <g fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 2v6"/>
+            <path d="M9 15c0-6 5-9 11-9s11 3 11 9"/>
+            <path d="M11 15h18l2 5H9z"/>
+            <path d="M12.5 20v33h15V20"/>
+            <path d="M9 53h22l-2 5H11z"/>
+            <path d="M15 58v4M25 58v4"/>
+            <path d="M13 62h14l2 5H11z"/>
+            <path d="M20 67v5"/>
+          </g>
+          <g class="flame">
+            <path d="M20 44c-4 0-6.5-3-6.5-6.5C13.5 33 17 30 20 25c3 5 6.5 8 6.5 12.5C26.5 41 24 44 20 44z"
+                  fill="var(--lamp)" opacity=".85"/>
+            <path d="M20 41c-2 0-3.2-1.6-3.2-3.4 0-2.2 1.8-3.8 3.2-6.6 1.4 2.8 3.2 4.4 3.2 6.6C23.2 39.4 22 41 20 41z"
+                  fill="var(--bg)" opacity=".55"/>
+          </g>
+        </svg>
+        <blockquote class="phrase" id="phraseOut"></blockquote>
+      </div>
+      <p class="say">When work turns up in your head at nine o'clock, don't chase it down. You said the words, which means it's handled — let that be the whole answer.</p>
       <div class="actions">
-        <button class="primary" id="finish"><span>Shutdown complete</span></button>
+        <button class="primary" id="finish"><span>Said it</span></button>
         <button class="ghost" data-go="4"><span>Back</span></button>
       </div>
     </section>
@@ -258,6 +312,33 @@ footer{padding:0 26px 26px}
         <small>Tomorrow starts with</small>
         <span id="carryText"></span>
       </div>
+
+      <div class="handoff">
+        <p class="eyebrow"><span>Send it on</span><span class="rule"></span></p>
+        <div class="actions">
+          <button data-send="things"><span>Open in Things</span></button>
+          <button data-send="obsidian"><span>Log to Obsidian</span></button>
+          <button data-send="file"><span>Download</span></button>
+        </div>
+        <p class="hint" id="sendNote">One at a time — each opens an app and leaves this page.</p>
+        <button class="ghost" id="settingsToggle"><span>Settings</span></button>
+        <div id="settings" hidden>
+          <label>Closing phrase
+            <input type="text" id="phrase" placeholder="The words you say out loud">
+          </label>
+          <label>Obsidian vault
+            <input type="text" id="vault" placeholder="Exact vault name, case-sensitive">
+          </label>
+          <label>Note path
+            <input type="text" id="notePath" placeholder="Shutdown/{date}">
+          </label>
+          <label>Things list
+            <input type="text" id="thingsList" placeholder="Blank for Inbox, or a project name">
+          </label>
+          <p class="hint">Saved on this device.</p>
+        </div>
+      </div>
+
       <div class="actions">
         <button class="ghost" id="reopen"><span>Reopen it</span></button>
       </div>
@@ -375,6 +456,123 @@ footer{padding:0 26px 26px}
   });
 
   document.getElementById("reopen").addEventListener("click", function(){ go(1); });
+
+  /* ---------- settings ---------- */
+  var DEFAULTS = {
+    phrase:"All's well.",
+    vault:"Obsidian", notePath:"Shutdown/{date}", thingsList:""
+  };
+  var SKEY = "shutdown.settings.v1";
+  var cfg = (function(){
+    var saved = {};
+    try { saved = JSON.parse(store.get(SKEY) || "{}"); } catch(e){}
+    var out = {};
+    Object.keys(DEFAULTS).forEach(function(k){
+      out[k] = (saved[k] !== undefined && saved[k] !== "") ? saved[k] : DEFAULTS[k];
+    });
+    return out;
+  })();
+  var fields = { phrase:"phrase", vault:"vault", notePath:"notePath", thingsList:"thingsList" };
+  function paintPhrase(){ document.getElementById("phraseOut").textContent = cfg.phrase; }
+  Object.keys(fields).forEach(function(k){
+    var el = document.getElementById(fields[k]);
+    el.value = cfg[k] || "";
+    el.placeholder = DEFAULTS[k] || el.placeholder;
+    el.addEventListener("input", function(){
+      cfg[k] = el.value.trim() || DEFAULTS[k];
+      store.set(SKEY, JSON.stringify(cfg));
+      if (k === "phrase") paintPhrase();
+    });
+  });
+  paintPhrase();
+  document.getElementById("settingsToggle").addEventListener("click", function(){
+    var s = document.getElementById("settings");
+    s.hidden = !s.hidden;
+  });
+
+  function todayEntry(){
+    var l = log(), today = dayKey(new Date());
+    for (var i = l.length - 1; i >= 0; i--) if (l[i].date === today) return l[i];
+    return null;
+  }
+  function note(msg){ document.getElementById("sendNote").textContent = msg; }
+
+  /* ---------- Things ---------- */
+  function toThings(e){
+    var items = [];
+    if (e.first){
+      items.push({ type:"to-do", attributes:{
+        title: e.first, when: "today", tags: ["shutdown"],
+        notes: "First thing, set " + e.date
+      }});
+    }
+    e.sweep.split("\n").map(function(s){ return s.trim(); })
+      .filter(Boolean).forEach(function(line){
+        var t = { type:"to-do", attributes:{ title: line, tags:["shutdown"] } };
+        if (cfg.thingsList) t.attributes.list = cfg.thingsList;
+        items.push(t);
+      });
+    if (!items.length){ note("Nothing to send — no tasks captured today."); return; }
+    var url = "things:///json?data=" + encodeURIComponent(JSON.stringify(items));
+    note(items.length + (items.length === 1 ? " item" : " items") + " sent to Things.");
+    window.location.href = url;
+  }
+
+  /* ---------- Obsidian ---------- */
+  function markdown(e){
+    var t = new Date(e.at).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"});
+    var out = ["## Shutdown — " + e.date + " " + t, ""];
+    if (e.first) out.push("**Tomorrow starts with:** " + e.first, "");
+    if (e.good)  out.push("**One good thing:** " + e.good, "");
+    if (e.sweep){
+      out.push("**Open loops**", "");
+      e.sweep.split("\n").map(function(s){ return s.trim(); })
+        .filter(Boolean).forEach(function(l){ out.push("- " + l); });
+      out.push("");
+    }
+    return out.join("\n");
+  }
+  function toObsidian(e){
+    if (!cfg.vault){
+      document.getElementById("settings").hidden = false;
+      document.getElementById("vault").focus();
+      note("Obsidian needs your vault name first.");
+      return;
+    }
+    var path = (cfg.notePath || "Shutdown/{date}").replace(/\{date\}/g, e.date).replace(/\.md$/,"");
+    var url = "obsidian://new?vault=" + encodeURIComponent(cfg.vault)
+            + "&file=" + encodeURIComponent(path)
+            + "&append=true"
+            + "&content=" + encodeURIComponent("\n" + markdown(e) + "\n");
+    note("Appended to " + path + ".md");
+    window.location.href = url;
+  }
+
+  /* ---------- file ---------- */
+  function toFile(){
+    var l = log();
+    if (!l.length){ note("Nothing logged yet."); return; }
+    var body = "# Shutdown log\n\nExported " + new Date().toISOString().slice(0,10) + "\n\n"
+      + l.slice().reverse().map(markdown).join("\n---\n\n");
+    var blob = new Blob([body], {type:"text/markdown"});
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "shutdown-log-" + dayKey(new Date()) + ".md";
+    a.click();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 2000);
+    note("Exported " + l.length + (l.length === 1 ? " day." : " days."));
+  }
+
+  document.addEventListener("click", function(ev){
+    var b = ev.target.closest("[data-send]");
+    if (!b) return;
+    var kind = b.dataset.send;
+    if (kind === "file") return toFile();
+    var e = todayEntry();
+    if (!e){ note("Finish the ritual first."); return; }
+    if (kind === "things") toThings(e);
+    if (kind === "obsidian") toObsidian(e);
+  });
 
   /* yesterday's carry-forward */
   (function(){
