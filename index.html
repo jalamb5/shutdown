@@ -18,6 +18,31 @@
   --ease:cubic-bezier(.22,.61,.36,1);
   --step:0;
 }
+/* ---------- super productivity panel ---------- */
+#spModal{
+  position:fixed; inset:0; z-index:50;
+  display:none; align-items:center; justify-content:center;
+  background:rgba(9,11,16,.66); backdrop-filter:blur(4px);
+  padding:18px;
+}
+#spModal.on{display:flex; animation:rise .35s var(--ease) both}
+#spModal .frame{
+  background:var(--bg); border:1px solid rgba(255,255,255,.14);
+  border-radius:16px; overflow:hidden; width:100%; max-width:860px;
+  height:min(82vh,720px); display:flex; flex-direction:column;
+  box-shadow:0 24px 70px rgba(0,0,0,.5);
+}
+#spModal .bar{
+  display:flex; align-items:center; gap:10px;
+  padding:10px 14px; border-bottom:1px solid rgba(255,255,255,.1);
+}
+#spModal .bar .t{font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.16em; text-transform:uppercase; opacity:.6; flex:1}
+#spModal .bar button{
+  background:transparent; border:1px solid rgba(255,255,255,.25); color:inherit;
+  border-radius:999px; padding:4px 12px; font-size:12px; cursor:pointer; opacity:.75;
+}
+#spModal .bar button:hover{opacity:1}
+#spModal iframe{border:0; flex:1; background:#fff; width:100%}
 *{box-sizing:border-box}
 html,body{height:100%}
 body{
@@ -335,6 +360,12 @@ footer{padding:0 26px 26px}
           <label>Note path
             <input type="text" id="notePath" placeholder="Shutdown/{date}">
           </label>
+          <label>Task destination
+            <select id="dest">
+              <option value="things">Things</option>
+              <option value="sp">Super Productivity</option>
+            </select>
+          </label>
           <label>Things list
             <input type="text" id="thingsList" placeholder="Blank for Inbox, or a project name">
           </label>
@@ -349,6 +380,17 @@ footer{padding:0 26px 26px}
 
   </div>
 </main>
+
+<!-- super productivity panel -->
+<div id="spModal" aria-hidden="true">
+  <div class="frame" role="dialog" aria-label="Super Productivity">
+    <div class="bar">
+      <span class="t">Super Productivity</span>
+      <button id="spClose" type="button">Close</button>
+    </div>
+    <iframe id="spFrame" src="https://app.super-productivity.com" title="Super Productivity" loading="lazy"></iframe>
+  </div>
+</div>
 
 <footer>
   <div class="horizon"><i id="fill"></i></div>
@@ -463,7 +505,7 @@ footer{padding:0 26px 26px}
   /* ---------- settings ---------- */
   var DEFAULTS = {
     phrase:"All's well.",
-    vault:"Obsidian", notePath:"Shutdown/{date}", thingsList:""
+    vault:"Obsidian", notePath:"Shutdown/{date}", thingsList:"", dest:"things"
   };
   var SKEY = "shutdown.settings.v1";
   var cfg = (function(){
@@ -475,10 +517,19 @@ footer{padding:0 26px 26px}
     });
     return out;
   })();
-  var fields = { phrase:"phrase", vault:"vault", notePath:"notePath", thingsList:"thingsList" };
+  var fields = { phrase:"phrase", vault:"vault", notePath:"notePath", thingsList:"thingsList", dest:"dest" };
   function paintPhrase(){ document.getElementById("phraseOut").textContent = cfg.phrase; }
   Object.keys(fields).forEach(function(k){
     var el = document.getElementById(fields[k]);
+    if (el.tagName === "SELECT"){
+      el.value = (cfg[k] === "sp") ? "sp" : "things";
+      el.addEventListener("change", function(){
+        cfg[k] = el.value;
+        store.set(SKEY, JSON.stringify(cfg));
+        paintDest();
+      });
+      return;
+    }
     el.value = cfg[k] || "";
     el.placeholder = DEFAULTS[k] || el.placeholder;
     el.addEventListener("input", function(){
@@ -488,6 +539,14 @@ footer{padding:0 26px 26px}
     });
   });
   paintPhrase();
+  function paintDest(){
+    var isSp = cfg.dest === "sp";
+    var btn = document.querySelector('[data-send="things"]');
+    if (btn) btn.querySelector("span").textContent = isSp ? "Open in Super Productivity" : "Open in Things";
+    var hint = document.getElementById("sendNote");
+    if (hint && isSp) hint.textContent = "Opens Super Productivity beside this page — add tomorrow's first thing there.";
+  }
+  paintDest();
   document.getElementById("settingsToggle").addEventListener("click", function(){
     var s = document.getElementById("settings");
     s.hidden = !s.hidden;
@@ -573,8 +632,28 @@ footer{padding:0 26px 26px}
     if (kind === "file") return toFile();
     var e = todayEntry();
     if (!e){ note("Finish the ritual first."); return; }
+    if (kind === "things" && cfg.dest === "sp") return openSp();
     if (kind === "things") toThings(e);
     if (kind === "obsidian") toObsidian(e);
+  });
+
+  /* ---------- Super Productivity ---------- */
+  function openSp(){
+    var m = document.getElementById("spModal");
+    m.classList.add("on");
+    m.setAttribute("aria-hidden","false");
+  }
+  function closeSp(){
+    var m = document.getElementById("spModal");
+    m.classList.remove("on");
+    m.setAttribute("aria-hidden","true");
+  }
+  document.getElementById("spClose").addEventListener("click", closeSp);
+  document.getElementById("spModal").addEventListener("click", function(ev){
+    if (ev.target === this) closeSp();
+  });
+  document.addEventListener("keydown", function(ev){
+    if (ev.key === "Escape") closeSp();
   });
 
   /* yesterday's carry-forward */
